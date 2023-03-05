@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-deployment
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: users
+  template:
+    metadata:
+      labels:
+        app: users
+    spec:
+      containers:
+      - name: users-container
+        image: users
+        env:
+        - name: DB_HOST
+          value: my-db1-instance.xxxxxxxx.us-east-1.rds.amazonaws.com
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_NAME
+          value: mydatabase1
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: my-db-secret
+              key: user-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-db-secret
+              key: users-password
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 1
+            memory: 512Mi
+          requests:
+            cpu: 250m
+            memory: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shift-deployment
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: shift
+  template:
+    metadata:
+      labels:
+        app: shift
+    spec:
+      containers:
+      - name: shift-container
+        image: shift-image
+        env:
+        - name: DB_HOST
+          value: my-db2-instance.xxxxxxxx.us-east-1.rds.amazonaws.com
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_NAME
+          value: mydatabase2
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: my-db-secret
+              key: shift-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: my-db-secret
+              key: shift-password
+        ports:
+        - containerPort: 8085
+        resources:
+          limits:
+            cpu: 1
+            memory: 512Mi
+          requests:
+            cpu: 250m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+spec:
+  selector:
+    app: user
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shift-service
+spec:
+  selector:
+    app: shift
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8085
+  type: LoadBalancer
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: users-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: users-deployment
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: shift-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: shift-deployment
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
